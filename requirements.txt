@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-torch
-torchvision
-albumentations
-opencv-python
-pillow
-rasterio

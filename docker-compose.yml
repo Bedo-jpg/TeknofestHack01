@@ -1,15 +1,27 @@
+version: '3.8'
+
 services:
   backend:
-    build: .
+    build: ./idea/backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
-      - .:/app                # kodu host'tan mount et (dev için)
+      - ./idea/backend:/app
     ports:
       - "8000:8000"
     depends_on:
       - redis
     env_file:
       - .env
+
+  frontend:
+    build: ./idea/frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./idea/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
 
   redis:
     image: redis:6
@@ -19,10 +31,10 @@ services:
       - redis_data:/data
 
   worker:
-    build: .
+    build: ./idea/backend
     command: rq worker default
     volumes:
-      - .:/app
+      - ./idea/backend:/app
     depends_on:
       - redis
     env_file:

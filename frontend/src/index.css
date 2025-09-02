@@ -69,3 +69,26 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+/* Harita ve panel düzenlemesi */
+.max-w-6xl {
+  max-width: 120rem !important;
+}
+
+/* Çizim paneli animasyon */
+.bg-white\/90 {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+}
+
+/* Buton hover efektleri */
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+button:active {
+  transform: translateY(0);
+}
