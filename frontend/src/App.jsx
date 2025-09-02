@@ -1,5 +1,11 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { checkHealth } from "./services/api";
+import MapboxDraw from "@mapbox/mapbox-gl-draw";
+import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
+import axios from "axios";
 
 const features = [
   { icon: "🛰️", title: "Deprem Öncesi & Sonrası", desc: "İHA görüntülerinden fark analizi" },
@@ -18,12 +24,148 @@ const team = [
 ];
 
 export default function App() {
+  const mapContainer = useRef(null);
+  const mapRef = useRef(null);
+  const drawRef = useRef(null);
+  const [geoJsonData, setGeoJsonData] = useState(null);
+  const [drawnShapes, setDrawnShapes] = useState([]);
+
+  // ✅ Backend bağlantı testi
+  const testConnection = async () => {
+    try {
+      const response = await checkHealth();
+      alert(`✅ Backend sağlıklı: ${response.data.status}`);
+    } catch (error) {
+      alert("❌ Backend bağlantı hatası!");
+    }
+  };
+
+  // ✅ Çizilen poligonları backend’e gönder
+    const sendPolygonsToBackend = async (geojson) => {
+    try {
+      const response = await axios.post("http://localhost:8000/aoi/analyze", geojson);
+
+      alert("✅ Poligonlar backend'e gönderildi! Job ID: " + response.data.job_id);
+      console.log("Backend response:", response.data);
+      
+    } catch (err) {
+      console.error("Backend error:", err);
+      alert("❌ Poligon gönderilemedi! Backend: http://localhost:8000/aoi/analyze");
+    }
+  };
+
+  const loadSampleData = () => {
+    const sampleData = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { damage: "high", confidence: 0.92 },
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [36.248, 36.248],
+                [36.25, 36.248],
+                [36.25, 36.25],
+                [36.248, 36.25],
+                [36.248, 36.248],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+
+    const map = mapRef.current;
+    if (map && map.getSource("damage-data")) {
+      map.getSource("damage-data").setData(sampleData);
+      setGeoJsonData(sampleData);
+      alert("✅ Örnek veri haritaya yüklendi!");
+    } else {
+      alert("⚠️ Önce harita yüklenmeli!");
+    }
+  };
+
+  // ✅ Harita init
+    useEffect(() => {
+    if (mapContainer.current && !mapRef.current) {
+      const map = new maplibregl.Map({
+        container: mapContainer.current,
+        style: "https://demotiles.maplibre.org/style.json",
+        center: [36.25, 36.25],
+        zoom: 10,
+      });
+
+      map.on("load", () => {
+        map.addSource("damage-data", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
+        map.addLayer({
+          id: "damaged-buildings",
+          type: "fill",
+          source: "damage-data",
+          paint: {
+            "fill-color": [
+              "case",
+              ["==", ["get", "damage"], "high"], "#ff0000",
+              ["==", ["get", "damage"], "medium"], "#ff9900",
+              "#00ff00",
+            ],
+            "fill-opacity": 0.6,
+          },
+        });
+
+        map.addLayer({
+          id: "building-outlines",
+          type: "line",
+          source: "damage-data",
+          paint: { "line-color": "#000", "line-width": 1 },
+        });
+
+        // ✅ DRAW Tool
+        const draw = new MapboxDraw({
+          displayControlsDefault: false,
+          controls: { polygon: true, trash: true },
+        });
+        map.addControl(draw);
+        drawRef.current = draw;
+
+        // Çizim tamamlandığında
+        draw.on("draw.create", (e) => {
+          const data = draw.getAll();
+          setDrawnShapes(data.features);
+          sendPolygonsToBackend(data.features);
+        });
+
+        draw.on("draw.update", (e) => {
+          const data = draw.getAll();
+          setDrawnShapes(data.features);
+        });
+
+      });
+
+      mapRef.current = map;
+
+      return () => {
+        if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+        }
+      };
+    }
+  }, []);
+
+
   return (
-    <div className="font-sans text-gray-900">
+    <div className="font-sans text-gray-900 min-h-screen">
       {/* Navbar */}
       <nav className="flex justify-between items-center px-8 py-4 bg-gray-800 text-white fixed w-full z-50 shadow-md">
-        <div><img src="/tabname.png" alt="QuackVisionAI Logo" className="w-32 h-auto"/>
-</div>
+        <div>
+          <img src="/tabname.png" alt="Logo" className="w-32 h-auto" />
+        </div>
         <ul className="flex space-x-6">
           <li className="hover:text-yellow-400 cursor-pointer">Yıkık Bina Tespiti</li>
           <li className="hover:text-yellow-400 cursor-pointer">Haritalama</li>
@@ -32,28 +174,109 @@ export default function App() {
         </ul>
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative h-screen bg-gradient-to-br from-green-700 to-indigo-900 flex items-center justify-center text-center px-6">
-        <motion.h1 
-          initial={{ opacity: 0, y: -50 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          transition={{ duration: 1 }}
-          className="text-white text-5xl md:text-7xl font-bold drop-shadow-lg"
-        >
-          Güzel Ülkemiz İçin Varız
-        </motion.h1>
+      {/* Hero + Map */}
+      <section className="relative min-h-screen bg-gradient-to-br from-green-700 to-indigo-900 flex items-center justify-center px-6 pt-16">
+        <div className="flex gap-6 w-full max-w-6xl">
+          {/* Sol Taraf - Butonlar ve Başlık */}
+          <div className="flex flex-col items-center text-center w-1/4">
+            <motion.h1 
+              initial={{ opacity: 0, y: -50 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              transition={{ duration: 1 }}
+              className="text-white text-4xl font-bold drop-shadow-lg mb-8"
+            >
+              Güzel Ülkemiz İçin Varız
+            </motion.h1>
+            
+            <div className="flex flex-col gap-4 w-full">
+              <button 
+                onClick={testConnection}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 w-full"
+              >
+                Backend Test
+              </button>
+              
+              <button 
+                onClick={loadSampleData}
+                className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 w-full"
+              >
+                Örnek Veri Yükle
+              </button>
+            </div>
+          </div>
+
+          {/* Orta - Harita */}
+          <div 
+            ref={mapContainer} 
+            className="flex-1 h-[70vh] rounded-lg shadow-xl border-2 border-white bg-white"
+          />
+
+          {/* Sağ Taraf - Çizim Paneli */}
+          <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-xl border-2 border-gray-300 w-1/4 h-fit">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">🎨 Çizim Araçları</h3>
+            
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => drawRef.current?.changeMode('draw_polygon')}
+                className="bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center gap-2"
+              >
+                <span>🔷</span>
+                Polygon Çiz
+              </button>
+              
+              <button 
+                onClick={() => drawRef.current?.changeMode('direct_select')}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center gap-2"
+              >
+                <span>✏️</span>
+                Düzenle
+              </button>
+              
+              <button 
+                onClick={() => drawRef.current?.deleteAll()}
+                className="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center gap-2"
+              >
+                <span>🗑️</span>
+                Temizle
+              </button>
+
+              <div className="border-t border-gray-300 my-3"></div>
+
+              <button 
+                onClick={() => {
+                  if (drawnShapes.length > 0) {
+                    sendPolygonsToBackend({
+                      type: "FeatureCollection",
+                      features: drawnShapes
+                    });
+                  }
+                }}
+                disabled={drawnShapes.length === 0}
+                className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-400 ..."
+              >
+                <span>📤</span>
+                Analiz Et ({drawnShapes.length})
+              </button>
+            </div>
+
+            {/* Çizilen Şekil Bilgisi */}
+            {drawnShapes.length > 0 && (
+              <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                <p className="text-sm text-yellow-800 text-center">
+                  🎯 {drawnShapes.length} şekil çizildi
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
-      {/* Features Section */}
+      {/* Features */}
       <section className="py-20 px-6 md:px-20 bg-gray-100">
         <h2 className="text-4xl font-bold text-center mb-12">Ürün Özellikleri</h2>
         <div className="grid md:grid-cols-3 gap-8">
           {features.map((f, idx) => (
-            <motion.div 
-              key={idx} 
-              whileHover={{ scale: 1.05 }} 
-              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition"
-            >
+            <motion.div key={idx} whileHover={{ scale: 1.05 }} className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition">
               <div className="text-4xl mb-4">{f.icon}</div>
               <h3 className="text-xl font-semibold mb-2">{f.title}</h3>
               <p className="text-gray-600">{f.desc}</p>
@@ -62,12 +285,12 @@ export default function App() {
         </div>
       </section>
 
-      {/* Team Section */}
-      <section className="py-20 px-6 md:px-20">
+      {/* Team */}
+      <section className="py-20 px-6 md:px-20 bg-white">
         <h2 className="text-4xl font-bold text-center mb-12">Ekip</h2>
         <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
           {team.map((t, idx) => (
-            <div key={idx} className="text-center bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition">
+            <div key={idx} className="text-center bg-gray-50 p-6 rounded-xl shadow-md hover:shadow-xl transition">
               <div className="text-6xl mb-4">👤</div>
               <h3 className="text-xl font-semibold">{t.name}</h3>
               <p className="text-gray-600">{t.role}</p>
@@ -78,26 +301,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="py-12 px-6 md:px-20 bg-gray-800 text-white">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          
-          <div className="mb-4 md:mb-0 mr-6">
-            <img src="/icon.png" alt="QuakeVisionAI Logo" className="h-20 w-auto"/>
-          </div>
-          <ul className="flex flex-wrap gap-4 text-sm md:text-base">
-            <li className="hover:text-yellow-400 cursor-pointer">Kurumsal</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Tarihçe</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Gizlilik ve Çerez Politikası</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Aydınlatma Metni</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Podcast</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Dosyalar</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Habercilik ve KVKK İlkeleri</li>
-            <li className="hover:text-yellow-400 cursor-pointer">AA WhatsApp Kanalları</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Yayın İlkeleri</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Künye</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Sosyal Medya</li>
-            <li className="hover:text-yellow-400 cursor-pointer">Logolar</li>
-          </ul>
-        </div>
+        <p className="text-center">© 2025 QuakeVisionAI | Tüm Hakları Saklıdır</p>
       </footer>
     </div>
   );
