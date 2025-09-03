@@ -1,0 +1,36 @@
+{
+  "job_id": "12345",
+  "status": "READY",
+  "results": [
+    {
+      "id": "bina_001",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [36.1576, 36.2061],
+            [36.1578, 36.2061],
+            [36.1578, 36.2063],
+            [36.1576, 36.2063],
+            [36.1576, 36.2061]
+          ]
+        ]
+      },
+      "properties": {
+        "damage_class": "collapsed", 
+        "confidence": 0.91
+      }
+    },
+    {
+      "id": "bina_002",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [...]
+      },
+      "properties": {
+        "damage_class": "damaged", 
+        "confidence": 0.77
+      }
+    }
+  ]
+}
