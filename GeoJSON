@@ -1,0 +1,69 @@
+POST /jobs
+Content-Type: application/json
+
+{
+  "aoi": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [36.1575, 36.2060],
+        [36.1600, 36.2060],
+        [36.1600, 36.2080],
+        [36.1575, 36.2080],
+        [36.1575, 36.2060]
+      ]
+    ]
+  },
+  "pre_image": "s3://bucket/antakya_pre/scene_01.tif",
+  "post_image": "s3://bucket/antakya_post/scene_01.tif"
+}
+
+{
+  "job_id": "12345",
+  "status": "PENDING"
+}
+
+{
+  "job_id": "12345",
+  "status": "PENDING"
+}
+
+{
+  "job_id": "12345",
+  "status": "READY",
+  "result": { ...GeoJSON... }
+}
+
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [36.1576, 36.2061],
+            [36.1578, 36.2061],
+            [36.1578, 36.2063],
+            [36.1576, 36.2063],
+            [36.1576, 36.2061]
+          ]
+        ]
+      },
+      "properties": {
+        "damage_class": "collapsed",
+        "confidence": 0.91
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Polygon", "coordinates": [...] },
+      "properties": {
+        "damage_class": "damaged",
+        "confidence": 0.78
+      }
+    }
+  ]
+}
+
