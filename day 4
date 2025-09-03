@@ -1,0 +1,49 @@
+import torch
+import json
+from model import load_model, predict
+
+def run_inference_background(job_id, pre_image, post_image, aoi):
+    try:
+        model = load_model("models/unet_epoch20.pth")
+        result_geojson = predict(model, post_image, aoi)
+
+        jobs[job_id] = {"status": "READY", "result": result_geojson}
+    except Exception as e:
+        jobs[job_id] = {"status": "FAILED", "error": str(e)}
+
+def predict(model, image_path, aoi):
+    # 1) Image → tiles
+    # 2) Model → mask
+    # 3) Mask → poligonlara çevir
+    # 4) AOI ile kesiştir
+    geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[36.1576, 36.2061], [36.1578, 36.2061], ...]]
+                },
+                "properties": {
+                    "damage_class": "collapsed",
+                    "confidence": 0.92
+                }
+            }
+        ]
+    }
+    return geojson
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str):
+    job = jobs.get(job_id)
+    if not job:
+        return {"error": "Job not found"}
+
+    return job
+
+{
+  "job_id": "12345",
+  "status": "READY",
+  "result": { ...GeoJSON... }
+}
