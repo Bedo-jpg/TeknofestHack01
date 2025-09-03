@@ -1,0 +1,18 @@
+{
+  "job_id": "12345",
+  "aoi": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [36.1575, 36.2060],
+        [36.1600, 36.2060],
+        [36.1600, 36.2080],
+        [36.1575, 36.2080],
+        [36.1575, 36.2060]
+      ]
+    ]
+  },
+  "pre_image": "s3://bucket/antakya_pre/img_001.tif",
+  "post_image": "s3://bucket/antakya_post/img_001.tif",
+  "model": "unet_v1"
+}
