@@ -16,8 +16,7 @@
 ---
 
 ## 🗂️ Product Backlog URL
-👉 [Trello Panosu](https://trello.com/)
-
+trello linki koyulacak 4 Eylül tarihinde
 ---
 
 ## 🏚️ Ürün Açıklaması
