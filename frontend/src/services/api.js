@@ -30,3 +30,8 @@ export const getResults = (jobId) => api.get(`/results/${jobId}`);
 export const getScenes = () => api.get('/imagery/scenes');
 
 export default api;
+// Görüntü URL'sini al
+// Örnek: getImageURL('2023-02-01') -> 'http://localhost:8000/imagery/2023-02-01'
+export const getImageURL = (imageId) => {
+  return `${API_BASE_URL}/imagery/${imageId}`;
+};
