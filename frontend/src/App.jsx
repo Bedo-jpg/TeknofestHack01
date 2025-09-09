@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { checkHealth } from "./services/api";
+import { checkHealth, analyzeAOI, analyzeHatay, getHatayResults } from "./services/api";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import axios from "axios";
@@ -28,13 +28,14 @@ const team = [
 export default function App() {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
-  const drawRef = useRef(null);  const [currentJobId, setCurrentJobId] = useState(null);
+  const drawRef = useRef(null);
+  const [currentJobId, setCurrentJobId] = useState(null);
   const [geoJsonData, setGeoJsonData] = useState(null);
   const [drawnShapes, setDrawnShapes] = useState([]);
   const [jobStatus, setJobStatus] = useState(null);
-  const [beforeId, setBeforeId] = useState('2023-02-01'); // Backend'den alacağın değer
-  const [afterId, setAfterId] = useState('2023-02-08');   // Backend'den alacağın değer
-  const [showSwipe, setShowSwipe] = useState(false);      // Swipe'ı gösterme/gizleme
+  const [beforeId, setBeforeId] = useState('2023-02-01');
+  const [afterId, setAfterId] = useState('2023-02-08');
+  const [showSwipe, setShowSwipe] = useState(false);
 
   // ✅ Backend bağlantı testi
   const testConnection = async () => {
@@ -46,19 +47,58 @@ export default function App() {
     }
   };
 
+  // ✅ Hatay analizi başlat
+  const startHatayAnalysis = async () => {
+    try {
+      const response = await analyzeHatay();
+      const data = response.data;
+      setCurrentJobId(data.task_id);
+      setJobStatus('started');
+      
+      alert("✅ Hatay analizi başlatıldı! Task ID: " + data.task_id);
+      
+      // Sonuçları periyodik olarak kontrol et
+      checkHatayResults(data.task_id);
+    } catch (error) {
+      console.error('Hatay analiz hatası:', error);
+      alert("❌ Hatay analizi başlatılamadı!");
+    }
+  };
+
+  // ✅ Hatay sonuçlarını kontrol et
+  const checkHatayResults = async (taskId) => {
+    try {
+      const response = await getHatayResults(taskId);
+      const results = response.data;
+      
+      if (results.features && results.features.length > 0) {
+        setGeoJsonData(results);
+        setJobStatus('completed');
+        
+        if (mapRef.current && mapRef.current.getSource('damage-data')) {
+          mapRef.current.getSource('damage-data').setData(results);
+        }
+        
+        alert(`✅ Analiz tamamlandı! ${results.features.length} hasar alanı bulundu.`);
+      } else {
+        setTimeout(() => checkHatayResults(taskId), 5000);
+      }
+    } catch (error) {
+      console.error('Sonuç kontrol hatası:', error);
+      setTimeout(() => checkHatayResults(taskId), 5000);
+    }
+  };
+
   // ✅ Çizilen poligonları backend'e gönder
   const sendPolygonsToBackend = async (geojson) => {
     try {
-      const response = await axios.post("http://localhost:8000/aoi/analyze", geojson);
+      const response = await analyzeAOI(geojson);
       setCurrentJobId(response.data.job_id);
       setJobStatus('PENDING');
-
       alert("✅ Poligonlar backend'e gönderildi! Job ID: " + response.data.job_id);
-      console.log("Backend response:", response.data);
-      
     } catch (err) {
       console.error("Backend error:", err);
-      alert("❌ Poligon gönderilemedi! Backend: http://localhost:8000/aoi/analyze");
+      alert("❌ Poligon gönderilemedi!");
     }
   };
 
@@ -72,41 +112,34 @@ export default function App() {
           const response = await axios.get(`http://localhost:8000/jobs/${currentJobId}/status`);
           const status = response.data.status;
           setJobStatus(status);
-          console.log("Job durumu:", status);
           
           if (status === 'SUCCESS') {
-            // ✅ İşlem tamamlandı, sonuçları al
             const resultResponse = await axios.get(`http://localhost:8000/jobs/${currentJobId}/results`);
             const resultGeoJSON = resultResponse.data;
             
-            // Sonuçları haritaya işle
             if (mapRef.current && mapRef.current.getSource('damage-data')) {
               mapRef.current.getSource('damage-data').setData(resultGeoJSON);
             }
             setGeoJsonData(resultGeoJSON);
             
-            // Polling'i durdur ve job id'sini sıfırla
             clearInterval(intervalId);
             setCurrentJobId(null);
             alert("✅ Analiz tamamlandı!");
           } else if (status === 'FAILURE') {
-            // ❌ Hata durumu
             clearInterval(intervalId);
             setCurrentJobId(null);
             setJobStatus(null);
             alert("❌ Analiz başarısız oldu!");
           }
-          // PENDING veya STARTED durumlarında bir şey yapma, bir sonraki poll'u bekler
         } catch (error) {
           console.error("Polling hatası:", error);
           clearInterval(intervalId);
           setCurrentJobId(null);
           setJobStatus(null);
         }
-      }, 2000); // Her 2 saniyede bir sorgula
+      }, 2000);
     }
     
-    // Component unmount olduğunda veya jobId değiştiğinde interval'i temizle
     return () => clearInterval(intervalId);
   }, [currentJobId]);
 
@@ -181,7 +214,6 @@ export default function App() {
           paint: { "line-color": "#000", "line-width": 1 },
         });
 
-        // ✅ DRAW Tool
         const draw = new MapboxDraw({
           displayControlsDefault: false,
           controls: { polygon: true, trash: true },
@@ -189,7 +221,6 @@ export default function App() {
         map.addControl(draw);
         drawRef.current = draw;
 
-        // Çizim tamamlandığında
         draw.on("draw.create", (e) => {
           const data = draw.getAll();
           setDrawnShapes(data.features);
@@ -228,8 +259,10 @@ export default function App() {
         
         {/* İşlem durumu göstergesi */}
         {jobStatus && (
-          <div className="text-sm">
-            Durum: {jobStatus === 'PENDING' ? '⏳ İşlem sürüyor' : '✅ Tamamlandı'}
+          <div className="text-sm bg-white text-black p-2 rounded-lg">
+            {jobStatus === 'PENDING' && '⏳ Poligon analizi yapılıyor...'}
+            {jobStatus === 'started' && '⏳ Hatay analizi yapılıyor...'}
+            {jobStatus === 'completed' && '✅ Analiz tamamlandı'}
           </div>
         )}
       </nav>
@@ -257,13 +290,19 @@ export default function App() {
               </button>
               
               <button 
+                onClick={startHatayAnalysis}
+                className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 w-full"
+              >
+                🚀 Hatay Analizi Başlat
+              </button>
+              
+              <button 
                 onClick={loadSampleData}
                 className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 w-full"
               >
                 Örnek Veri Yükle
               </button>
 
-              {/* İşlem durumu */}
               {jobStatus && (
                 <div className="p-2 bg-white rounded-lg text-center">
                   <div className="font-semibold">İşlem Durumu</div>
@@ -279,12 +318,12 @@ export default function App() {
             className="flex-1 h-[70vh] rounded-lg shadow-xl border-2 border-white bg-white relative"
           />
           {showSwipe && (
-          <SwipeControl 
-            map={mapRef.current} 
-            beforeId={beforeId} 
-            afterId={afterId} 
-          />
-        )}
+            <SwipeControl 
+              map={mapRef.current} 
+              beforeId={beforeId} 
+              afterId={afterId} 
+            />
+          )}
 
           {/* Sağ Taraf - Çizim Paneli */}
           <div className="bg-white/90 backdrop-blur-sm rounded-xl p-6 shadow-xl border-2 border-gray-300 w-1/4 h-fit">
@@ -296,8 +335,6 @@ export default function App() {
                 onClick={() => {
                   if (drawRef.current) {
                     drawRef.current.changeMode('draw_polygon');
-                  } else {
-                    console.error("Draw tool henüz yüklenmedi!");
                   }
                 }}
               >
@@ -309,8 +346,6 @@ export default function App() {
                 onClick={() => {
                   if (drawRef.current) {
                     drawRef.current.changeMode('direct_select');
-                  } else {
-                    console.error("Draw tool henüz yüklenmedi!");
                   }
                 }}
                 className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center gap-2"
@@ -324,8 +359,6 @@ export default function App() {
                   if (drawRef.current) {
                     drawRef.current.deleteAll();
                     setDrawnShapes([]);
-                  } else {
-                    console.error("Draw tool henüz yüklenmedi!");
                   }
                 }}
                 className="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition duration-300 flex items-center justify-center gap-2"
@@ -361,7 +394,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Çizilen Şekil Bilgisi */}
             {drawnShapes.length > 0 && (
               <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                 <p className="text-sm text-yellow-800 text-center">
@@ -407,5 +439,4 @@ export default function App() {
       </footer>
     </div>
   );
- }
-
+}

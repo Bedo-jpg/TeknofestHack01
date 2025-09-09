@@ -1,37 +1,26 @@
+// frontend/src/services/api.js
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  }
-});
+export const checkHealth = () => axios.get(`${API_BASE_URL}/health`);
 
-// Health check
-export const checkHealth = () => api.get('/health');
+export const analyzeHatay = () => axios.post(`${API_BASE_URL}/api/analyze/hatay`);
 
-// Görüntü analizi için
-export const analyzeImage = (formData) => api.post('/predict', formData, {
-  headers: {
-    'Content-Type': 'multipart/form-data'
-  }
-});
+export const getHatayResults = (taskId) => 
+  axios.get(`${API_BASE_URL}/api/results/hatay/${taskId}`);
 
-// AOI analizi için
-export const analyzeAOI = (geojsonData) => api.post('/aoi/analyze', geojsonData);
-
-// Sonuçları getir
-export const getResults = (jobId) => api.get(`/results/${jobId}`);
-
-// Görüntü sahnelerini getir
-export const getScenes = () => api.get('/imagery/scenes');
-
-export default api;
-// Görüntü URL'sini al
-// Örnek: getImageURL('2023-02-01') -> 'http://localhost:8000/imagery/2023-02-01'
 export const getImageURL = (imageId) => {
+  // Bu fonksiyonu backend'deki gerçek endpoint'e göre güncelle
   return `${API_BASE_URL}/imagery/${imageId}`;
 };
+
+// Mevcut fonksiyonları da güncelle
+export const analyzeAOI = (geojson) => 
+  axios.post(`${API_BASE_URL}/aoi/analyze`, geojson);
+
+export const getJobStatus = (jobId) => 
+  axios.get(`${API_BASE_URL}/jobs/${jobId}/status`);
+
+export const getJobResults = (jobId) => 
+  axios.get(`${API_BASE_URL}/jobs/${jobId}/results`);
